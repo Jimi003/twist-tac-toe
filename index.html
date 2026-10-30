@@ -48,6 +48,7 @@
   .score .num { font-size: 1.5rem; font-weight: 700; }
   .score.x { color: var(--x); }
   .score.o { color: var(--o); }
+  .score.d { color: var(--muted); }
   #status { min-height: 1.6em; font-size: 1.15rem; font-weight: 600; text-align: center; }
   .board {
     display: grid;
@@ -98,10 +99,11 @@
 </head>
 <body>
   <h1><span class="x">Twist</span>-Tac-<span class="o">Toe</span></h1>
-  <p class="tagline">Only <strong>3 marks</strong> each. Place a 4th and your oldest one vanishes!</p>
+  <p class="tagline">Only <strong>3 marks</strong> each. Before you place a 4th, your oldest one vanishes!</p>
 
   <div class="scoreboard">
     <div class="score x" id="score-x"><div class="label">X</div><div class="num" id="num-x">0</div></div>
+    <div class="score d" id="score-d"><div class="label">Draws</div><div class="num" id="num-d">0</div></div>
     <div class="score o" id="score-o"><div class="label">O</div><div class="num" id="num-o">0</div></div>
   </div>
 
@@ -115,8 +117,9 @@
   </div>
 
   <p class="rules">
-    Get 3 in a row to win. The faded, pulsing mark is your oldest &mdash; it disappears
-    when you make your next move, so plan ahead (and watch your opponent's too).
+    Get 3 in a row to win. The faded, pulsing mark is your oldest &mdash; it vanishes
+    as you make your next move, and you may even place right where it was (handy for
+    holding a block). If the same position shows up 3 times, it's a draw.
   </p>
 
 <script>
@@ -132,7 +135,8 @@
 
   var boardEl = document.getElementById('board');
   var statusEl = document.getElementById('status');
-  var scores = { X: 0, O: 0 };
+  var scores = { X: 0, O: 0, D: 0 };
+  var nextStarter = 'X';
   var vsAI = false;
   var state;
   var aiTimer = null;
@@ -154,11 +158,15 @@
       // Move history per player, oldest first.
       history: { X: [], O: [] },
       turn: startPlayer,
+      starter: startPlayer,
       winner: null,
-      winLine: null
+      winLine: null,
+      draw: false,
+      seen: {}
     };
   }
 
+  // The search ignores repetition, so it doesn't need the `seen` table.
   function cloneState(s) {
     return {
       board: s.board.slice(),
@@ -167,6 +175,10 @@
       winner: s.winner,
       winLine: s.winLine
     };
+  }
+
+  function positionKey(s) {
+    return s.history.X.join('') + '|' + s.history.O.join('') + '|' + s.turn;
   }
 
   function findWin(board) {
@@ -179,14 +191,17 @@
     return null;
   }
 
-  // Applies a move in place. A player's oldest mark is removed when they place their 4th.
+  // Applies a move in place. At the limit, the mover's oldest mark vanishes BEFORE they
+  // place, so its cell is free again. (Removing it after placing is a forced win for the
+  // first player, which is why the order matters.)
   function applyMove(s, index) {
     var p = s.turn;
-    s.board[index] = p;
-    s.history[p].push(index);
-    if (s.history[p].length > MAX_MARKS) {
-      s.board[s.history[p].shift()] = null;
+    var mine = s.history[p];
+    if (mine.length === MAX_MARKS) {
+      s.board[mine.shift()] = null;
     }
+    s.board[index] = p;
+    mine.push(index);
     var win = findWin(s.board);
     if (win) {
       s.winner = win.player;
@@ -198,16 +213,19 @@
 
   function startRound() {
     clearTimeout(aiTimer);
-    // Alternate who starts so neither side always has the first-move edge.
-    var starter = (scores.X + scores.O) % 2 === 0 ? 'X' : 'O';
-    state = newState(starter);
+    state = newState(nextStarter);
+    state.seen[positionKey(state)] = 1;
     render(null);
     maybeAIMove();
   }
 
+  function roundOver() {
+    return !!(state.winner || state.draw);
+  }
+
   function onCellClick(e) {
     var idx = Number(e.currentTarget.dataset.index);
-    if (state.winner || state.board[idx]) return;
+    if (roundOver() || legalMoves(state).indexOf(idx) === -1) return;
     if (vsAI && state.turn === 'O') return;
     play(idx);
   }
@@ -216,20 +234,31 @@
     applyMove(state, idx);
     if (state.winner) {
       scores[state.winner]++;
+    } else {
+      var key = positionKey(state);
+      state.seen[key] = (state.seen[key] || 0) + 1;
+      if (state.seen[key] >= 3) {
+        state.draw = true;
+        scores.D++;
+      }
+    }
+    if (roundOver()) {
+      // Alternate who starts so neither side always has the first-move edge.
+      nextStarter = state.starter === 'X' ? 'O' : 'X';
     }
     render(idx);
     maybeAIMove();
   }
 
   function maybeAIMove() {
-    if (!vsAI || state.winner || state.turn !== 'O') return;
+    if (!vsAI || roundOver() || state.turn !== 'O') return;
     aiTimer = setTimeout(function () {
-      if (state.winner || state.turn !== 'O') return;
+      if (roundOver() || state.turn !== 'O') return;
       play(bestMove(state));
     }, 450);
   }
 
-  // Depth-limited minimax. The game has no draws and can loop forever, so depth is capped.
+  // Depth-limited negamax; the game can loop forever, so the search depth is capped.
   function bestMove(s) {
     var moves = legalMoves(s);
     var best = -Infinity, choices = [];
@@ -243,9 +272,13 @@
     return choices[Math.floor(Math.random() * choices.length)];
   }
 
+  // Empty cells, plus the mover's own oldest cell when it is about to vanish.
   function legalMoves(s) {
+    var mine = s.history[s.turn];
     var out = [];
-    for (var i = 0; i < 9; i++) if (!s.board[i]) out.push(i);
+    for (var i = 0; i < 9; i++) {
+      if (!s.board[i] || (mine.length === MAX_MARKS && mine[0] === i)) out.push(i);
+    }
     return out;
   }
 
@@ -270,28 +303,30 @@
   }
 
   function render(lastIdx) {
+    var over = roundOver();
     var fadingIdx = -1;
-    if (!state.winner && state.history[state.turn].length === MAX_MARKS) {
+    if (!over && state.history[state.turn].length === MAX_MARKS) {
       fadingIdx = state.history[state.turn][0];
     }
     // Also hint the opponent's oldest mark once they're at the limit.
     var other = state.turn === 'X' ? 'O' : 'X';
     var otherFading = -1;
-    if (!state.winner && state.history[other].length === MAX_MARKS) {
+    if (!over && state.history[other].length === MAX_MARKS) {
       otherFading = state.history[other][0];
     }
+    var legal = over ? [] : legalMoves(state);
 
     for (var i = 0; i < 9; i++) {
       var cell = cells[i];
       var v = state.board[i];
       cell.className = 'cell' + (v ? ' ' + v.toLowerCase() : '');
       cell.innerHTML = v ? '<span>' + v + '</span>' : '';
-      cell.disabled = !!(v || state.winner || (vsAI && state.turn === 'O'));
+      cell.disabled = legal.indexOf(i) === -1 || (vsAI && state.turn === 'O');
       if (i === lastIdx && v) cell.classList.add('pop');
       if (i === fadingIdx) cell.classList.add('fading');
       if (state.winLine && state.winLine.indexOf(i) !== -1) cell.classList.add('win');
       var label = 'Cell ' + (i + 1) + (v ? ', ' + v : ', empty');
-      if (i === fadingIdx) label += ', will vanish on your next move';
+      if (i === fadingIdx) label += ', will vanish when you move; you may place here again';
       cell.setAttribute('aria-label', label);
     }
 
@@ -302,11 +337,14 @@
 
     document.getElementById('num-x').textContent = scores.X;
     document.getElementById('num-o').textContent = scores.O;
-    document.getElementById('score-x').classList.toggle('active', !state.winner && state.turn === 'X');
-    document.getElementById('score-o').classList.toggle('active', !state.winner && state.turn === 'O');
+    document.getElementById('num-d').textContent = scores.D;
+    document.getElementById('score-x').classList.toggle('active', !over && state.turn === 'X');
+    document.getElementById('score-o').classList.toggle('active', !over && state.turn === 'O');
 
     if (state.winner) {
       statusEl.textContent = state.winner + ' wins the round!';
+    } else if (state.draw) {
+      statusEl.textContent = "Draw \u2014 the position repeated 3 times.";
     } else if (vsAI && state.turn === 'O') {
       statusEl.textContent = 'Computer is thinking…';
     } else {
@@ -318,7 +356,8 @@
     vsAI = ai;
     document.getElementById('mode-pvp').classList.toggle('on', !ai);
     document.getElementById('mode-ai').classList.toggle('on', ai);
-    scores = { X: 0, O: 0 };
+    scores = { X: 0, O: 0, D: 0 };
+    nextStarter = 'X';
     startRound();
   }
 
