@@ -1,33 +1,38 @@
-# Twist-Tac-Toe
+# Ultimate Tic-Tac-Toe
 
-Tic-tac-toe with a twist: **each player can only have 3 marks on the board.**
-Before you place a 4th, your oldest mark vanishes.
+Tic-tac-toe with a twist: the board is **nine small tic-tac-toe boards** arranged in a 3×3 grid,
+and **where you play decides where your opponent must play next.**
 
 **Play online:** https://jimi003.github.io/twist-tac-toe/
 
 ## Rules
 
-- X and O take turns placing marks on a 3×3 grid.
-- Get 3 in a row (horizontal, vertical or diagonal) to win the round.
-- At 3 marks, your oldest one vanishes as you place your next — and you may place
-  right where it was, which is how you hold a block.
-- The faded, pulsing mark is the one that will vanish on your next move.
-  Your opponent's oldest mark is dimmed as a hint too.
-- If the same position occurs 3 times, the round is a draw.
+- Each move is a square inside one of the small boards.
+- The square you pick sends your opponent to the matching small board
+  (top-left square → top-left board, centre square → centre board, and so on).
+- If that board is already won or full, your opponent may play in any open board.
+- Win a small board with 3 in a row. **Win 3 small boards in a row to win the game.**
+- If every board fills up before that happens, whoever owns more small boards wins
+  (equal counts is a draw).
 
-## Why the vanish happens *before* placing
-
-If the oldest mark is removed *after* you place (and its cell can't be reused), the
-first player wins by force by opening on an edge — the second player can't defend.
-An exhaustive search of both versions confirmed this. With the current rule, best play
-from both sides is a draw, so a defender can always hold, and wins come from mistakes.
+The highlighted board(s) show where you may play, and the gold outline marks the last move.
 
 ## Modes
 
 - **2 Players** — pass-and-play on the same device.
-- **vs Computer** — you are X, the computer is O (depth-limited negamax; it never
-  blunders into a lost position, but it punishes yours). The starting player
-  alternates each round.
+- **vs Computer** — you are X, the computer is O (Monte Carlo tree search). **Easy** thinks
+  for ~0.1s, **Hard** for ~1.2s.
+
+Scores (including draws) are tracked across rounds, and the starting player alternates.
+
+## Why not "vanishing marks"?
+
+An earlier version of this repo used a different twist (only 3 marks per player; the oldest
+vanishes). Exhaustive analysis showed that no variant of it plays well: removing the oldest mark
+after placing is a forced first-player win, and removing it before placing lets either side
+hold a draw by simply blocking. Ultimate Tic-Tac-Toe doesn't have that problem — every move
+constrains your opponent, so there's always a real fight, and random play comes out even
+(about 49% X / 44% O / 6% draws over 3,000 games).
 
 ## Run locally
 
