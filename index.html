@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twist-Tac-Toe</title>
+<style>
+  :root {
+    --bg: #14121f;
+    --panel: #1f1b33;
+    --cell: #2a2545;
+    --cell-hover: #352f58;
+    --x: #ff6b9d;
+    --o: #4dd8e6;
+    --text: #f0eefc;
+    --muted: #9b95c4;
+    --win: #ffd34d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px;
+    background: radial-gradient(circle at top, #231e3d, var(--bg));
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { margin: 0; font-size: clamp(1.6rem, 6vw, 2.4rem); letter-spacing: 1px; }
+  h1 span.x { color: var(--x); }
+  h1 span.o { color: var(--o); }
+  .tagline { margin: 0; color: var(--muted); text-align: center; max-width: 420px; font-size: 0.95rem; }
+  .scoreboard { display: flex; gap: 12px; }
+  .score {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 8px 18px;
+    text-align: center;
+    min-width: 90px;
+    border: 2px solid transparent;
+  }
+  .score.active { border-color: currentColor; }
+  .score .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; }
+  .score .num { font-size: 1.5rem; font-weight: 700; }
+  .score.x { color: var(--x); }
+  .score.o { color: var(--o); }
+  #status { min-height: 1.6em; font-size: 1.15rem; font-weight: 600; text-align: center; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: min(88vw, 360px);
+    aspect-ratio: 1;
+  }
+  .cell {
+    background: var(--cell);
+    border: none;
+    border-radius: 14px;
+    font-size: clamp(2.6rem, 14vw, 4.2rem);
+    font-weight: 800;
+    cursor: pointer;
+    color: var(--text);
+    transition: background 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cell:hover:not(:disabled) { background: var(--cell-hover); transform: scale(1.03); }
+  .cell:disabled { cursor: default; }
+  .cell.x { color: var(--x); }
+  .cell.o { color: var(--o); }
+  .cell.pop span { animation: pop 0.25s ease-out; }
+  .cell.fading span { opacity: 0.3; animation: pulse 1s ease-in-out infinite; }
+  .cell.win { background: rgba(255, 211, 77, 0.22); box-shadow: 0 0 0 3px var(--win) inset; }
+  @keyframes pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes pulse { 50% { opacity: 0.15; } }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  button.btn {
+    background: var(--panel);
+    color: var(--text);
+    border: 2px solid var(--cell);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button.btn:hover { border-color: var(--muted); }
+  button.btn.on { background: var(--cell-hover); border-color: var(--text); }
+  .rules { color: var(--muted); font-size: 0.85rem; max-width: 420px; text-align: center; line-height: 1.4; }
+  @media (prefers-reduced-motion: reduce) {
+    .cell, .cell span { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <h1><span class="x">Twist</span>-Tac-<span class="o">Toe</span></h1>
+  <p class="tagline">Only <strong>3 marks</strong> each. Place a 4th and your oldest one vanishes!</p>
+
+  <div class="scoreboard">
+    <div class="score x" id="score-x"><div class="label">X</div><div class="num" id="num-x">0</div></div>
+    <div class="score o" id="score-o"><div class="label">O</div><div class="num" id="num-o">0</div></div>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <div class="board" id="board" aria-label="Game board"></div>
+
+  <div class="controls">
+    <button class="btn on" id="mode-pvp">2 Players</button>
+    <button class="btn" id="mode-ai">vs Computer</button>
+    <button class="btn" id="restart">New Round</button>
+  </div>
+
+  <p class="rules">
+    Get 3 in a row to win. The faded, pulsing mark is your oldest &mdash; it disappears
+    when you make your next move, so plan ahead (and watch your opponent's too).
+  </p>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAX_MARKS = 3;
+  var LINES = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8],
+    [0, 3, 6], [1, 4, 7], [2, 5, 8],
+    [0, 4, 8], [2, 4, 6]
+  ];
+
+  var boardEl = document.getElementById('board');
+  var statusEl = document.getElementById('status');
+  var scores = { X: 0, O: 0 };
+  var vsAI = false;
+  var state;
+  var aiTimer = null;
+  var cells = [];
+
+  for (var i = 0; i < 9; i++) {
+    var btn = document.createElement('button');
+    btn.className = 'cell';
+    btn.setAttribute('aria-label', 'Cell ' + (i + 1));
+    btn.dataset.index = i;
+    btn.addEventListener('click', onCellClick);
+    boardEl.appendChild(btn);
+    cells.push(btn);
+  }
+
+  function newState(startPlayer) {
+    return {
+      board: Array(9).fill(null),
+      // Move history per player, oldest first.
+      history: { X: [], O: [] },
+      turn: startPlayer,
+      winner: null,
+      winLine: null
+    };
+  }
+
+  function cloneState(s) {
+    return {
+      board: s.board.slice(),
+      history: { X: s.history.X.slice(), O: s.history.O.slice() },
+      turn: s.turn,
+      winner: s.winner,
+      winLine: s.winLine
+    };
+  }
+
+  function findWin(board) {
+    for (var l = 0; l < LINES.length; l++) {
+      var a = LINES[l][0], b = LINES[l][1], c = LINES[l][2];
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+        return { player: board[a], line: LINES[l] };
+      }
+    }
+    return null;
+  }
+
+  // Applies a move in place. A player's oldest mark is removed when they place their 4th.
+  function applyMove(s, index) {
+    var p = s.turn;
+    s.board[index] = p;
+    s.history[p].push(index);
+    if (s.history[p].length > MAX_MARKS) {
+      s.board[s.history[p].shift()] = null;
+    }
+    var win = findWin(s.board);
+    if (win) {
+      s.winner = win.player;
+      s.winLine = win.line;
+    } else {
+      s.turn = p === 'X' ? 'O' : 'X';
+    }
+  }
+
+  function startRound() {
+    clearTimeout(aiTimer);
+    // Alternate who starts so neither side always has the first-move edge.
+    var starter = (scores.X + scores.O) % 2 === 0 ? 'X' : 'O';
+    state = newState(starter);
+    render(null);
+    maybeAIMove();
+  }
+
+  function onCellClick(e) {
+    var idx = Number(e.currentTarget.dataset.index);
+    if (state.winner || state.board[idx]) return;
+    if (vsAI && state.turn === 'O') return;
+    play(idx);
+  }
+
+  function play(idx) {
+    applyMove(state, idx);
+    if (state.winner) {
+      scores[state.winner]++;
+    }
+    render(idx);
+    maybeAIMove();
+  }
+
+  function maybeAIMove() {
+    if (!vsAI || state.winner || state.turn !== 'O') return;
+    aiTimer = setTimeout(function () {
+      if (state.winner || state.turn !== 'O') return;
+      play(bestMove(state));
+    }, 450);
+  }
+
+  // Depth-limited minimax. The game has no draws and can loop forever, so depth is capped.
+  function bestMove(s) {
+    var moves = legalMoves(s);
+    var best = -Infinity, choices = [];
+    for (var m = 0; m < moves.length; m++) {
+      var next = cloneState(s);
+      applyMove(next, moves[m]);
+      var score = -negamax(next, 5, -Infinity, Infinity);
+      if (score > best) { best = score; choices = [moves[m]]; }
+      else if (score === best) { choices.push(moves[m]); }
+    }
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  function legalMoves(s) {
+    var out = [];
+    for (var i = 0; i < 9; i++) if (!s.board[i]) out.push(i);
+    return out;
+  }
+
+  // Scores the position for the side to move (s.turn).
+  function negamax(s, depth, alpha, beta) {
+    if (s.winner) {
+      // The player who just moved won, so the side to move has lost.
+      return -(100 + depth);
+    }
+    if (depth === 0) return 0;
+    var moves = legalMoves(s);
+    var best = -Infinity;
+    for (var m = 0; m < moves.length; m++) {
+      var next = cloneState(s);
+      applyMove(next, moves[m]);
+      var v = -negamax(next, depth - 1, -beta, -alpha);
+      if (v > best) best = v;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
+  function render(lastIdx) {
+    var fadingIdx = -1;
+    if (!state.winner && state.history[state.turn].length === MAX_MARKS) {
+      fadingIdx = state.history[state.turn][0];
+    }
+    // Also hint the opponent's oldest mark once they're at the limit.
+    var other = state.turn === 'X' ? 'O' : 'X';
+    var otherFading = -1;
+    if (!state.winner && state.history[other].length === MAX_MARKS) {
+      otherFading = state.history[other][0];
+    }
+
+    for (var i = 0; i < 9; i++) {
+      var cell = cells[i];
+      var v = state.board[i];
+      cell.className = 'cell' + (v ? ' ' + v.toLowerCase() : '');
+      cell.innerHTML = v ? '<span>' + v + '</span>' : '';
+      cell.disabled = !!(v || state.winner || (vsAI && state.turn === 'O'));
+      if (i === lastIdx && v) cell.classList.add('pop');
+      if (i === fadingIdx) cell.classList.add('fading');
+      if (state.winLine && state.winLine.indexOf(i) !== -1) cell.classList.add('win');
+      var label = 'Cell ' + (i + 1) + (v ? ', ' + v : ', empty');
+      if (i === fadingIdx) label += ', will vanish on your next move';
+      cell.setAttribute('aria-label', label);
+    }
+
+    // Soft hint on opponent's oldest mark (dimmed, no pulse) to help planning.
+    if (otherFading !== -1 && cells[otherFading].querySelector('span')) {
+      cells[otherFading].querySelector('span').style.opacity = '0.6';
+    }
+
+    document.getElementById('num-x').textContent = scores.X;
+    document.getElementById('num-o').textContent = scores.O;
+    document.getElementById('score-x').classList.toggle('active', !state.winner && state.turn === 'X');
+    document.getElementById('score-o').classList.toggle('active', !state.winner && state.turn === 'O');
+
+    if (state.winner) {
+      statusEl.textContent = state.winner + ' wins the round!';
+    } else if (vsAI && state.turn === 'O') {
+      statusEl.textContent = 'Computer is thinking…';
+    } else {
+      statusEl.textContent = (vsAI ? 'Your turn (X)' : state.turn + "'s turn");
+    }
+  }
+
+  function setMode(ai) {
+    vsAI = ai;
+    document.getElementById('mode-pvp').classList.toggle('on', !ai);
+    document.getElementById('mode-ai').classList.toggle('on', ai);
+    scores = { X: 0, O: 0 };
+    startRound();
+  }
+
+  document.getElementById('mode-pvp').addEventListener('click', function () { setMode(false); });
+  document.getElementById('mode-ai').addEventListener('click', function () { setMode(true); });
+  document.getElementById('restart').addEventListener('click', startRound);
+
+  startRound();
+})();
+</script>
+</body>
+</html>
