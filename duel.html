@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duel Tic-Tac-Toe</title>
+<style>
+  :root {
+    --bg: #14121f;
+    --panel: #1f1b33;
+    --cell: #2a2545;
+    --cell-hover: #3d3665;
+    --x: #ff6b9d;
+    --o: #4dd8e6;
+    --text: #f0eefc;
+    --muted: #9b95c4;
+    --win: #ffd34d;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    background: radial-gradient(circle at top, #231e3d, var(--bg));
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .nav { display: flex; gap: 6px; }
+  .nav a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 2px solid var(--cell);
+    font-size: 0.85rem;
+  }
+  .nav a:hover { border-color: var(--muted); }
+  .nav a[aria-current="page"] { color: var(--text); background: var(--cell-hover); border-color: var(--text); }
+  h1 { margin: 0; font-size: clamp(1.5rem, 6vw, 2.2rem); letter-spacing: 1px; text-align: center; }
+  h1 .x { color: var(--x); }
+  h1 .o { color: var(--o); }
+  .tagline { margin: 0; color: var(--muted); text-align: center; max-width: 440px; font-size: 0.92rem; }
+  .scoreboard { display: flex; gap: 10px; }
+  .score {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 6px 16px;
+    text-align: center;
+    min-width: 80px;
+  }
+  .score .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+  .score .num { font-size: 1.3rem; font-weight: 700; }
+  .score.x { color: var(--x); }
+  .score.o { color: var(--o); }
+  .score.d { color: var(--muted); }
+  #status { min-height: 1.5em; font-size: 1.05rem; font-weight: 600; text-align: center; max-width: 460px; }
+  #recap { min-height: 2.6em; color: var(--muted); font-size: 0.9rem; text-align: center; max-width: 420px; line-height: 1.35; margin: 0; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+    width: min(92vw, 400px, max(260px, calc(100vh - 450px)));
+    aspect-ratio: 1;
+  }
+  .cell {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--cell);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 0;
+    font-size: clamp(2rem, 11vw, 3.6rem);
+    font-weight: 900;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .cell:hover:not(:disabled) { background: var(--cell-hover); }
+  .cell:disabled { cursor: default; }
+  .cell.x { color: var(--x); }
+  .cell.o { color: var(--o); }
+  .cell.ghost { opacity: 0.6; border-color: currentColor; background: var(--cell-hover); }
+  .cell.fresh { box-shadow: 0 0 0 2px var(--win) inset; animation: pop 0.3s ease-out; }
+  .cell.clash { border: 2px dashed var(--win); color: var(--win); font-size: clamp(1.4rem, 7vw, 2.2rem); animation: pop 0.3s ease-out; }
+  .cell.win { border-color: var(--win); background: rgba(255, 211, 77, 0.18); }
+  @keyframes pop { from { transform: scale(0.6); opacity: 0.2; } to { transform: scale(1); opacity: 1; } }
+
+  .panel { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 96px; justify-content: center; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  button.btn {
+    background: var(--panel);
+    color: var(--text);
+    border: 2px solid var(--cell);
+    border-radius: 10px;
+    padding: 7px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  button.btn:hover:not(:disabled) { border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.45; cursor: default; }
+  button.btn.on { background: var(--cell-hover); border-color: var(--text); }
+  button.throw { min-width: 78px; padding: 6px 10px; line-height: 1.2; }
+  button.throw .ico { display: block; font-size: 1.5rem; }
+  button.throw .nm { font-size: 0.72rem; color: var(--muted); }
+  button.primary { background: var(--win); color: #231e3d; border-color: var(--win); font-weight: 700; padding: 8px 22px; }
+  button.primary:hover:not(:disabled) { border-color: #fff; }
+  .cover-msg { font-weight: 600; text-align: center; }
+  .rules { color: var(--muted); font-size: 0.82rem; max-width: 460px; text-align: center; line-height: 1.45; margin: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .cell { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <nav class="nav" aria-label="Games">
+    <a href="index.html">Ultimate</a>
+    <a href="duel.html" aria-current="page">Duel</a>
+  </nav>
+  <h1><span class="x">Duel</span> Tic-Tac-<span class="o">Toe</span></h1>
+  <p class="tagline">Both players pick a square at the same time. Pick the same one and it's rock-paper-scissors for it.</p>
+
+  <div class="scoreboard">
+    <div class="score x"><div class="label">X</div><div class="num" id="num-x">0</div></div>
+    <div class="score d"><div class="label">Draws</div><div class="num" id="num-d">0</div></div>
+    <div class="score o"><div class="label">O</div><div class="num" id="num-o">0</div></div>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <div class="board" id="board" aria-label="Game board"></div>
+  <p id="recap" aria-live="polite"></p>
+
+  <div class="panel">
+    <div id="pickPanel" class="panel" hidden>
+      <div class="row" id="throws" role="group" aria-label="Your throw if there is a clash"></div>
+      <button class="btn primary" id="lock" disabled>Lock in</button>
+    </div>
+    <div id="coverPanel" class="panel" hidden>
+      <div class="cover-msg" id="coverMsg"></div>
+      <button class="btn primary" id="ready"></button>
+    </div>
+    <div id="overPanel" class="panel" hidden>
+      <button class="btn primary" id="again">New Round</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="btn on" id="mode-ai">vs Computer</button>
+    <button class="btn" id="mode-pvp">2 Players</button>
+  </div>
+  <div class="row" id="difficulty">
+    <button class="btn" id="diff-easy">Easy</button>
+    <button class="btn on" id="diff-hard">Hard</button>
+  </div>
+
+  <p class="rules">
+    Each round both players secretly pick an empty square <em>and</em> a throw. Different squares:
+    both marks land. Same square: a clash &mdash; rock beats scissors, scissors beat paper, paper
+    beats rock. The winner takes the square, the loser places nothing that round, and a tie leaves
+    the square open. Three in a row wins; if both complete a line in the same round, or the board
+    fills up, it's a draw.
+  </p>
+
+<script src="duel-table.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var LINES = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8],
+    [0, 3, 6], [1, 4, 7], [2, 5, 8],
+    [0, 4, 8], [2, 4, 6]
+  ];
+  var NAMES = ['top-left', 'top', 'top-right', 'left', 'centre', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+  var THROWS = [
+    { icon: '\u270A', name: 'Rock' },
+    { icon: '\u270B', name: 'Paper' },
+    { icon: '\u270C\uFE0F', name: 'Scissors' }
+  ];
+  var RANDOM = 3;
+
+  // ---------- engine ----------
+
+  function beats(a, b) { return (a - b + 3) % 3 === 1; } // paper>rock, scissors>paper, rock>scissors
+
+  function lineCells(board, p) {
+    var out = [];
+    for (var i = 0; i < LINES.length; i++) {
+      var l = LINES[i];
+      if (board[l[0]] === p && board[l[1]] === p && board[l[2]] === p) out = out.concat(l);
+    }
+    return out;
+  }
+
+  // null while the game continues, otherwise { result: 'X' | 'O' | 'D', cells: [...] }
+  function judge(board) {
+    var xs = lineCells(board, 1), os = lineCells(board, 2);
+    if (xs.length && os.length) return { result: 'D', cells: xs.concat(os) };
+    if (xs.length) return { result: 'X', cells: xs };
+    if (os.length) return { result: 'O', cells: os };
+    for (var i = 0; i < 9; i++) if (!board[i]) return null;
+    return { result: 'D', cells: [] };
+  }
+
+  // x picks cell a with throw ta, o picks cell c with throw tc
+  function resolve(board, a, c, ta, tc) {
+    var nb = board.slice();
+    if (a !== c) {
+      nb[a] = 1; nb[c] = 2;
+      return { board: nb, fresh: [a, c], clash: -1, winner: 0 };
+    }
+    var winner = ta === tc ? 0 : (beats(ta, tc) ? 1 : 2);
+    if (winner) nb[a] = winner;
+    return { board: nb, fresh: winner ? [a] : [], clash: a, winner: winner };
+  }
+
+  // ---------- computer opponent ----------
+
+  var TABLE = (function () {
+    var raw = atob(window.DUEL_TABLE), t = new Int8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) t[i] = (raw.charCodeAt(i) << 24) >> 24;
+    return t;
+  })();
+
+  // expected score for X from this board, in [-1, 1], when both sides play optimally
+  function value(board) {
+    var j = judge(board);
+    if (j) return j.result === 'X' ? 1 : j.result === 'O' ? -1 : 0;
+    var idx = 0;
+    for (var i = 8; i >= 0; i--) idx = idx * 3 + board[i];
+    return TABLE[idx] / 127;
+  }
+
+  function withMarks(board, a, c) {
+    var nb = board.slice();
+    if (a !== undefined && a !== null) nb[a] = 1;
+    if (c !== undefined && c !== null) nb[c] = 2;
+    return nb;
+  }
+
+  // payoff matrix for X: rows are X's squares, columns are O's squares
+  function payoffMatrix(board, empty) {
+    var n = empty.length, v = value(board), M = [];
+    for (var i = 0; i < n; i++) {
+      M.push([]);
+      for (var j = 0; j < n; j++) {
+        if (i === j) {
+          var a = empty[i];
+          // a clash is a three-way split: X takes it, O takes it, or a tie and nothing changes
+          M[i].push((value(withMarks(board, a, null)) + value(withMarks(board, null, a)) + v) / 3);
+        } else {
+          M[i].push(value(withMarks(board, empty[i], empty[j])));
+        }
+      }
+    }
+    return M;
+  }
+
+  // Zero-sum matrix game by simplex (Bland's rule). A[i][j] is the row player's payoff.
+  // Returns { value, x: row strategy, y: column strategy }.
+  function solveGame(A) {
+    var n = A.length, m = A[0].length, mn = Infinity, i, j;
+    for (i = 0; i < n; i++) for (j = 0; j < m; j++) if (A[i][j] < mn) mn = A[i][j];
+    var shift = 1 - mn, cols = m + n + 1, T = [], basis = [];
+    for (i = 0; i < n; i++) {
+      T.push(new Array(cols).fill(0));
+      for (j = 0; j < m; j++) T[i][j] = A[i][j] + shift;
+      T[i][m + i] = 1; T[i][cols - 1] = 1; basis.push(m + i);
+    }
+    T.push(new Array(cols).fill(0));
+    for (j = 0; j < m; j++) T[n][j] = -1;
+    var EPS = 1e-9;
+    for (var iter = 0; iter < 1000; iter++) {
+      var col = -1;
+      for (j = 0; j < cols - 1; j++) if (T[n][j] < -EPS) { col = j; break; }
+      if (col < 0) break;
+      var row = -1, best = Infinity;
+      for (i = 0; i < n; i++) {
+        if (T[i][col] > EPS) {
+          var ratio = T[i][cols - 1] / T[i][col];
+          if (ratio < best - EPS || (Math.abs(ratio - best) <= EPS && basis[i] < basis[row])) { best = ratio; row = i; }
+        }
+      }
+      if (row < 0) break;
+      var pv = T[row][col];
+      for (j = 0; j < cols; j++) T[row][j] /= pv;
+      for (i = 0; i <= n; i++) {
+        if (i === row) continue;
+        var f = T[i][col];
+        if (f) for (j = 0; j < cols; j++) T[i][j] -= f * T[row][j];
+      }
+      basis[row] = col;
+    }
+    var x = [], y = new Array(m).fill(0), sx = 0, sy = 0;
+    for (i = 0; i < n; i++) { x.push(Math.max(0, T[n][m + i])); sx += x[i]; }
+    for (i = 0; i < n; i++) if (basis[i] < m) { y[basis[i]] = Math.max(0, T[i][cols - 1]); }
+    for (j = 0; j < m; j++) sy += y[j];
+    for (i = 0; i < n; i++) x[i] /= sx;
+    for (j = 0; j < m; j++) y[j] /= sy;
+    return { value: sx > 0 ? 1 / sx - shift : 0, x: x, y: y };
+  }
+
+  function sample(probs, rnd) {
+    var cut = [], tot = 0, i;
+    for (i = 0; i < probs.length; i++) { cut.push(probs[i] < 0.005 ? 0 : probs[i]); tot += cut[i]; }
+    var r = rnd() * tot;
+    for (i = 0; i < cut.length; i++) { r -= cut[i]; if (r < 0 && cut[i] > 0) return i; }
+    for (i = cut.length - 1; i >= 0; i--) if (cut[i] > 0) return i;
+    return 0;
+  }
+
+  function emptyCells(board) {
+    var out = [];
+    for (var i = 0; i < 9; i++) if (!board[i]) out.push(i);
+    return out;
+  }
+
+  // The unbeatable computer: plays the game-theoretic mixed strategy for this position.
+  function equilibriumPick(board, me, rnd) {
+    var empty = emptyCells(board);
+    if (empty.length === 1) return empty[0];
+    var M = payoffMatrix(board, empty), A;
+    if (me === 1) A = M;
+    else A = M[0].map(function (_, j) { return M.map(function (row) { return -row[j]; }); });
+    return empty[sample(solveGame(A).x, rnd)];
+  }
+
+  function threats(board, p) {
+    var out = [];
+    LINES.forEach(function (l) {
+      var mine = 0, free = -1;
+      l.forEach(function (c) { if (board[c] === p) mine++; else if (!board[c]) free = c; });
+      if (mine === 2 && free >= 0 && out.indexOf(free) < 0) out.push(free);
+    });
+    return out;
+  }
+
+  // The easy computer: grabs wins, usually blocks, otherwise likes the centre and corners.
+  function heuristicPick(board, me, rnd) {
+    var empty = emptyCells(board);
+    var pick = function (arr) { return arr[Math.floor(rnd() * arr.length)]; };
+    var mine = threats(board, me);
+    if (mine.length) return pick(mine);
+    var theirs = threats(board, 3 - me);
+    if (theirs.length && rnd() < 0.7) return pick(theirs);
+    var pref = [4, 0, 2, 6, 8].filter(function (c) { return !board[c]; });
+    return pref.length && rnd() < 0.6 ? pick(pref) : pick(empty);
+  }
+
+  function aiPick(board, me, diff, rnd) {
+    return diff === 'easy' ? heuristicPick(board, me, rnd) : equilibriumPick(board, me, rnd);
+  }
+
+  // ---------- UI ----------
+
+  var $ = function (id) { return document.getElementById(id); };
+  var boardEl = $('board'), cells = [], throwBtns = [];
+  var state;
+
+  var scores = { x: 0, o: 0, d: 0 };
+  var mode = 'ai', diff = 'hard', thinkTimer = null;
+
+  function freshState() {
+    return {
+      board: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      round: 1,
+      phase: 'cover',      // pick | cover | thinking | over
+      picker: 1,
+      sel: -1,
+      thr: -1,
+      locked: { 1: null, 2: null },
+      fresh: [], clash: -1, winCells: [],
+      recap: '', over: null
+    };
+  }
+
+  function mark(p) { return p === 1 ? 'X' : 'O'; }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  function recapText(a, c, ta, tc, r) {
+    if (r.clash < 0) return 'X took ' + NAMES[a] + ', O took ' + NAMES[c] + '.';
+    var s = '\u26A1 Clash on ' + NAMES[a] + '! X ' + THROWS[ta].icon + ' vs O ' + THROWS[tc].icon + ' \u2014 ';
+    if (!r.winner) return s + 'tie, the square stays open.';
+    return s + mark(r.winner) + ' takes it; ' + mark(3 - r.winner) + ' places nothing this round.';
+  }
+
+  function render() {
+    var s = state, i;
+    for (i = 0; i < 9; i++) {
+      var c = cells[i], v = s.board[i], ghost = s.phase === 'pick' && s.sel === i, cls = 'cell';
+      if (v === 1) cls += ' x';
+      if (v === 2) cls += ' o';
+      if (s.fresh.indexOf(i) >= 0) cls += ' fresh';
+      if (s.clash === i && !v) cls += ' clash';
+      if (s.winCells.indexOf(i) >= 0) cls += ' win';
+      if (ghost) cls += ' ghost ' + (s.picker === 1 ? 'x' : 'o');
+      c.className = cls;
+      c.textContent = v ? mark(v) : ghost ? mark(s.picker) : (s.clash === i ? '\u26A1' : '');
+      c.disabled = !(s.phase === 'pick' && !v);
+      c.setAttribute('aria-label', cap(NAMES[i]) + ', ' + (v ? mark(v) : ghost ? 'selected' : 'empty'));
+    }
+
+    var status = '';
+    if (s.phase === 'over') {
+      status = s.over.result === 'D' ? 'Draw!' : mark(s.over.result === 'X' ? 1 : 2) + ' wins!';
+    } else if (s.phase === 'thinking') {
+      status = 'Computer is choosing\u2026';
+    } else if (s.phase === 'cover') {
+      status = 'Round ' + s.round + (mode === 'pvp' ? ' \u2014 pass the device' : '');
+    } else if (mode === 'pvp') {
+      status = 'Round ' + s.round + ' \u2014 ' + mark(s.picker) + ': pick a square and a throw';
+    } else {
+      status = 'Round ' + s.round + ' \u2014 pick a square and a throw';
+    }
+    $('status').textContent = status;
+    $('status').style.color = s.phase === 'pick' && mode === 'pvp' ? (s.picker === 1 ? 'var(--x)' : 'var(--o)') : '';
+    $('recap').textContent = s.recap;
+
+    $('pickPanel').hidden = s.phase !== 'pick';
+    $('coverPanel').hidden = s.phase !== 'cover';
+    $('overPanel').hidden = s.phase !== 'over';
+    throwBtns.forEach(function (b, k) { var on = s.thr === k; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    $('lock').disabled = !(s.sel >= 0 && s.thr >= 0);
+    if (s.phase === 'cover') {
+      $('coverMsg').textContent = s.picker === 1
+        ? 'Round ' + s.round + ': pass the device to X. O, look away!'
+        : 'X has locked in. Pass the device to O. X, look away!';
+      $('ready').textContent = "I'm " + mark(s.picker) + ' \u2014 ready';
+    }
+    $('num-x').textContent = scores.x;
+    $('num-o').textContent = scores.o;
+    $('num-d').textContent = scores.d;
+    $('mode-ai').classList.toggle('on', mode === 'ai');
+    $('mode-pvp').classList.toggle('on', mode === 'pvp');
+    $('difficulty').hidden = mode !== 'ai';
+    $('diff-easy').classList.toggle('on', diff === 'easy');
+    $('diff-hard').classList.toggle('on', diff === 'hard');
+  }
+
+  function startRound() {
+    clearTimeout(thinkTimer);
+    state = freshState();
+    state.phase = mode === 'pvp' ? 'cover' : 'pick';
+    render();
+  }
+
+  function onCell(i) {
+    if (state.phase !== 'pick' || state.board[i]) return;
+    state.sel = state.sel === i ? -1 : i;
+    render();
+  }
+
+  function onThrow(k) {
+    if (state.phase !== 'pick') return;
+    state.thr = state.thr === k ? -1 : k;
+    render();
+  }
+
+  function finalThrow(k) { return k === RANDOM ? Math.floor(Math.random() * 3) : k; }
+
+  function lockIn() {
+    var s = state;
+    if (s.phase !== 'pick' || s.sel < 0 || s.thr < 0) return;
+    s.locked[s.picker] = { cell: s.sel, throw: finalThrow(s.thr) };
+    s.sel = -1; s.thr = -1;
+    if (mode === 'ai') {
+      s.locked[2] = { cell: aiPick(s.board, 2, diff, Math.random), throw: Math.floor(Math.random() * 3) };
+      s.phase = 'thinking';
+      render();
+      thinkTimer = setTimeout(reveal, 650);
+    } else if (s.picker === 1) {
+      s.picker = 2; s.phase = 'cover';
+      render();
+    } else {
+      reveal();
+    }
+  }
+
+  function reveal() {
+    var s = state, a = s.locked[1], c = s.locked[2];
+    var r = resolve(s.board, a.cell, c.cell, a.throw, c.throw);
+    s.board = r.board; s.fresh = r.fresh; s.clash = r.clash;
+    s.recap = recapText(a.cell, c.cell, a.throw, c.throw, r);
+    s.locked = { 1: null, 2: null };
+    var j = judge(s.board);
+    if (j) {
+      s.over = j; s.winCells = j.cells; s.phase = 'over';
+      if (j.result === 'X') scores.x++; else if (j.result === 'O') scores.o++; else scores.d++;
+      if (j.result === 'D' && j.cells.length) s.recap += ' Both lines completed together.';
+    } else {
+      s.round++; s.picker = 1;
+      s.phase = mode === 'pvp' ? 'cover' : 'pick';
+    }
+    render();
+  }
+
+  function ready() {
+    if (state.phase !== 'cover') return;
+    state.phase = 'pick';
+    render();
+  }
+
+  function setMode(m) {
+    if (m === mode) return;
+    mode = m; scores = { x: 0, o: 0, d: 0 };
+    startRound();
+  }
+
+  function init() {
+    for (var i = 0; i < 9; i++) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'cell';
+      b.addEventListener('click', (function (i) { return function () { onCell(i); }; })(i));
+      boardEl.appendChild(b); cells.push(b);
+    }
+    THROWS.concat([{ icon: '\uD83C\uDFB2', name: 'Random' }]).forEach(function (t, k) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn throw';
+      b.innerHTML = '<span class="ico"></span><span class="nm"></span>';
+      b.querySelector('.ico').textContent = t.icon;
+      b.querySelector('.nm').textContent = t.name;
+      b.addEventListener('click', function () { onThrow(k); });
+      $('throws').appendChild(b); throwBtns.push(b);
+    });
+    $('lock').addEventListener('click', lockIn);
+    $('ready').addEventListener('click', ready);
+    $('again').addEventListener('click', startRound);
+    $('mode-ai').addEventListener('click', function () { setMode('ai'); });
+    $('mode-pvp').addEventListener('click', function () { setMode('pvp'); });
+    $('diff-easy').addEventListener('click', function () { diff = 'easy'; startRound(); });
+    $('diff-hard').addEventListener('click', function () { diff = 'hard'; startRound(); });
+    startRound();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
