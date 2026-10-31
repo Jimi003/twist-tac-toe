@@ -31,6 +31,17 @@
     color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
+  .nav { display: flex; gap: 6px; }
+  .nav a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 2px solid var(--cell);
+    font-size: 0.85rem;
+  }
+  .nav a:hover { border-color: var(--muted); }
+  .nav a[aria-current="page"] { color: var(--text); background: var(--cell-hover); border-color: var(--text); }
   h1 { margin: 0; font-size: clamp(1.5rem, 6vw, 2.2rem); letter-spacing: 1px; text-align: center; }
   h1 .x { color: var(--x); }
   h1 .o { color: var(--o); }
@@ -123,6 +134,10 @@
 </style>
 </head>
 <body>
+  <nav class="nav" aria-label="Games">
+    <a href="index.html" aria-current="page">Ultimate</a>
+    <a href="duel.html">Duel</a>
+  </nav>
   <h1><span class="x">Ultimate</span> Tic-Tac-<span class="o">Toe</span></h1>
   <p class="tagline">Win small boards to win the big one. Where you play decides where your opponent must play next.</p>
 
